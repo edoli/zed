@@ -1,0 +1,67 @@
+# Edot GPUI branch
+
+This is a GitHub fork of `zed-industries/zed` with the original Git history.
+The `edot-gpui` branch starts at upstream commit
+`279fe070bb389b79652e52065b2f001edcc0b11b`, the same source revision previously
+published as `gpui-pre 0.3.8`. Edot consumes `gpui` and `gpui_platform` directly
+from one pinned commit; their workspace dependencies come from this same tree.
+
+## Maintained changes
+
+Only these GPUI source/manifests are changed:
+
+- `crates/gpui/Cargo.toml`
+- `crates/gpui/src/svg_renderer.rs`
+- `crates/gpui_windows/Cargo.toml`
+
+`extended-image-formats` controls the additional image codecs and image/rayon.
+`svg-text` controls SVG text, font loading and shaping, and emoji fallback.
+`svg-raster-images` controls raster images embedded in SVGs. Upstream default
+features still enable all three. Edot disables defaults and explicitly enables
+`windows-manifest`; BMP/GIF/JPEG/PNG/WebP and SVG vectors remain enabled.
+
+The two image dependencies and GPUI's resvg dependency use explicit feature
+lists because inheriting the workspace dependency would unconditionally enable
+the functionality that Edot excludes. Keep their version requirements aligned
+with the corresponding workspace dependencies when merging upstream updates.
+
+The root README review notice is required by upstream `.rules`. This branch
+also contains this maintenance document. No crates.io snapshot importer or
+separate patch file is used.
+
+## Update from upstream
+
+The local checkout uses these remotes:
+
+```sh
+git remote add upstream https://github.com/zed-industries/zed.git
+```
+
+Add the remote only if it does not already exist. With local changes preserved:
+
+```sh
+git switch edot-gpui
+git pull --ff-only origin edot-gpui
+git fetch upstream
+git merge upstream/main
+```
+
+Resolve any conflicts while preserving the optional features and upstream
+default behavior. Check the workspace image/resvg versions and any GPUI API
+changes. Validate the consumer application using local path dependencies if
+needed, then publish the branch:
+
+```sh
+git push origin edot-gpui
+git rev-parse HEAD
+```
+
+In Edot, set both normal and test `gpui` dependencies and `gpui_platform` to
+the same full Git commit. Update the lockfile and regenerate local path-remap
+configuration. Run the application's feature/source guard, formatting, Clippy,
+all headless tests, upstream-default feature check, release build and binary
+path audit. Check executable size and document the new upstream and fork pins.
+
+Use a commit pin in Edot instead of a floating branch. Do not force-push a
+published commit used by an application release. Merging the upstream branch
+updates this fork; the application's pin moves only after its checks pass.

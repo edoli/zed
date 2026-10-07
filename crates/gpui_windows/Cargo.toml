@@ -13,7 +13,11 @@ path = "src/gpui_windows.rs"
 doctest = false
 
 [features]
-default = ["gpui/default"]
+extended-image-formats = [
+    "image/dds", "image/exr", "image/ff", "image/hdr", "image/ico",
+    "image/pnm", "image/qoi", "image/rayon", "image/tga", "image/tiff",
+]
+default = ["gpui/default", "extended-image-formats"]
 test-support = ["gpui/test-support"]
 screen-capture = ["gpui/screen-capture", "scap"]
 
@@ -29,7 +33,8 @@ dunce.workspace = true
 etagere.workspace = true
 futures.workspace = true
 gpui_util.workspace = true
-image.workspace = true
+# Workspace image features would unconditionally enable the extended codecs.
+image = { version = "0.25.1", default-features = false, features = ["bmp", "gif", "jpeg", "png", "webp"] }
 itertools.workspace = true
 log.workspace = true
 parking_lot.workspace = true
