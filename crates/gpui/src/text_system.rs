@@ -288,6 +288,12 @@ impl TextSystem {
         names
     }
 
+    /// Refresh deferred system fonts once on a background thread.
+    /// Existing font resolution and layouts are preserved for stable rendering.
+    pub fn refresh_system_fonts_once(&self) -> Result<bool> {
+        self.platform_text_system.refresh_system_fonts_once()
+    }
+
     /// Add a font's data to the text system.
     ///
     /// Cached font resolution and line layouts are invalidated after installation.

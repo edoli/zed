@@ -13,6 +13,7 @@ path = "src/gpui_windows.rs"
 doctest = false
 
 [features]
+deferred-fonts = []
 extended-image-formats = [
     "image/dds", "image/exr", "image/ff", "image/hdr", "image/ico",
     "image/pnm", "image/qoi", "image/rayon", "image/tga", "image/tiff",

@@ -2,6 +2,7 @@ use std::{
     borrow::Cow,
     ffi::{c_uint, c_void},
     mem::ManuallyDrop,
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 use anyhow::{Context, Result};
@@ -38,6 +39,7 @@ struct FontInfo {
 pub(crate) struct DirectWriteTextSystem {
     components: DirectWriteComponents,
     state: RwLock<DirectWriteState>,
+    system_fonts_refreshed: AtomicBool,
 }
 
 struct DirectWriteComponents {
@@ -195,9 +197,11 @@ impl DirectWriteTextSystem {
 
         let system_font_collection = unsafe {
             let mut result = None;
-            components
-                .factory
-                .GetSystemFontCollection(false, &mut result, true)?;
+            components.factory.GetSystemFontCollection(
+                false,
+                &mut result,
+                !cfg!(feature = "deferred-fonts"),
+            )?;
             result.context("Failed to get system font collection")?
         };
         let custom_font_set = unsafe { components.builder.CreateFontSet()? };
@@ -209,6 +213,7 @@ impl DirectWriteTextSystem {
 
         Ok(Self {
             components,
+            system_fonts_refreshed: AtomicBool::new(false),
             state: RwLock::new(DirectWriteState {
                 gpu_state,
                 system_font_collection,
@@ -240,6 +245,24 @@ impl PlatformTextSystem for DirectWriteTextSystem {
 
     fn all_font_names(&self) -> Vec<String> {
         self.state.read().all_font_names(&self.components)
+    }
+
+    fn refresh_system_fonts_once(&self) -> Result<bool> {
+        if !cfg!(feature = "deferred-fonts")
+            || self.system_fonts_refreshed.swap(true, Ordering::Relaxed)
+        {
+            return Ok(false);
+        }
+        let mut collection = None;
+        // Windows' synchronous change check must not hold the rendering state lock.
+        unsafe {
+            self.components
+                .factory
+                .GetSystemFontCollection(false, &mut collection, true)?;
+        }
+        let collection = collection.context("Failed to refresh system font collection")?;
+        self.state.write().system_font_collection = collection;
+        Ok(true)
     }
 
     fn font_id(&self, font: &Font) -> Result<FontId> {
@@ -337,7 +360,7 @@ impl DirectWriteState {
         };
 
         let mut font_id = select_font(self, font);
-        if font_id.is_none() {
+        if font_id.is_none() && !cfg!(feature = "deferred-fonts") {
             // try updating system fonts and reselect
             let mut collection = None;
             let font_collection_updated = unsafe {
@@ -1976,6 +1999,33 @@ mod tests {
         D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT,
     };
     use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC};
+
+    #[test]
+    #[cfg(feature = "deferred-fonts")]
+    fn test_deferred_system_fonts_refresh_once_preserves_resolved_fonts() -> Result<()> {
+        let system = std::sync::Arc::new(DirectWriteTextSystem::new(None)?);
+        let font = gpui::font("Segoe UI");
+        let original_id = system.font_id(&font)?;
+        let original_font_count = system.state.read().fonts.len();
+        let worker = std::thread::spawn({
+            let system = system.clone();
+            move || system.refresh_system_fonts_once()
+        });
+        let refreshed = worker
+            .join()
+            .map_err(|_| anyhow::anyhow!("font refresh worker panicked"))??;
+        assert!(refreshed);
+        assert!(!system.refresh_system_fonts_once()?);
+        assert_eq!(system.font_id(&font)?, original_id);
+        assert_eq!(system.state.read().fonts.len(), original_font_count);
+        assert!(
+            system
+                .all_font_names()
+                .iter()
+                .any(|name| name == "Segoe UI")
+        );
+        Ok(())
+    }
 
     #[test]
     fn test_cluster_map() {

@@ -13,6 +13,10 @@ Only these GPUI source/manifests are changed:
 - `crates/gpui/Cargo.toml`
 - `crates/gpui/src/svg_renderer.rs`
 - `crates/gpui_windows/Cargo.toml`
+- `crates/gpui/src/platform.rs`
+- `crates/gpui/src/text_system.rs`
+- `crates/gpui_platform/Cargo.toml`
+- `crates/gpui_windows/src/direct_write.rs`
 
 `extended-image-formats` controls the additional image codecs and image/rayon.
 `svg-text` controls SVG text, font loading and shaping, and emoji fallback.
@@ -24,6 +28,16 @@ The two image dependencies and GPUI's resvg dependency use explicit feature
 lists because inheriting the workspace dependency would unconditionally enable
 the functionality that Edot excludes. Keep their version requirements aligned
 with the corresponding workspace dependencies when merging upstream updates.
+
+`gpui_platform/deferred-fonts` forwards an opt-in Windows policy. It starts with
+the cached DirectWrite system font collection and disables automatic change
+checks when font selection fails. The consumer calls
+`TextSystem::refresh_system_fonts_once` on a background thread after its first
+frame. That call attempts an immediate update at most once, including failures,
+without holding the rendering state lock during the Windows call. Existing font
+IDs and layout caches are preserved. After that update the process keeps its
+collection until restart. Without this feature, upstream font initialization and
+failed-selection update behavior remain unchanged.
 
 The root README review notice is required by upstream `.rules`. This branch
 also contains this maintenance document. No crates.io snapshot importer or

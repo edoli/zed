@@ -1444,6 +1444,11 @@ pub trait PlatformTextSystem: Send + Sync {
     fn set_missing_glyph_sink(&self, _sink: Option<Arc<dyn MissingGlyphSink>>) {}
     /// Get all available font names.
     fn all_font_names(&self) -> Vec<String>;
+    /// Refresh deferred system fonts once. Existing font IDs remain valid.
+    /// Call from a background thread; returns whether the collection was refreshed.
+    fn refresh_system_fonts_once(&self) -> Result<bool> {
+        Ok(false)
+    }
     /// Get the font ID for a font descriptor.
     fn font_id(&self, descriptor: &Font) -> Result<FontId>;
     /// Prewarm any system font caches needed to shape text.

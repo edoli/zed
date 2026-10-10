@@ -14,6 +14,7 @@ doctest = false
 
 [features]
 default = []
+deferred-fonts = ["gpui_windows/deferred-fonts"]
 bench-support = ["gpui/bench-support", "gpui_macos/bench-support", "gpui_wgpu/bench-support"]
 font-kit = ["gpui_macos/font-kit"]
 inspector = ["gpui/inspector"]
