@@ -331,8 +331,9 @@ impl TextSystem {
         self.missing_glyph_reporter.report(missing_glyphs);
     }
 
-    /// Get the FontId for the configure font family and style.
-    fn font_id(&self, font: &Font) -> Result<FontId> {
+    /// Get the FontId for the requested family and style without applying fallbacks.
+    /// Successful and failed lookups are cached.
+    pub fn font_id(&self, font: &Font) -> Result<FontId> {
         fn clone_font_id_result(font_id: &Result<FontId>) -> Result<FontId> {
             match font_id {
                 Ok(font_id) => Ok(*font_id),

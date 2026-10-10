@@ -39,6 +39,10 @@ IDs and layout caches are preserved. After that update the process keeps its
 collection until restart. Without this feature, upstream font initialization and
 failed-selection update behavior remain unchanged.
 
+`TextSystem::font_id` exposes the existing fallible lookup without applying
+fallbacks. Edot uses it to persist the actual fallback family when the configured
+font cannot be resolved, keeping the setting and rendered body font aligned.
+
 The root README review notice is required by upstream `.rules`. This branch
 also contains this maintenance document. No crates.io snapshot importer or
 separate patch file is used.
