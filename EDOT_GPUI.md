@@ -23,6 +23,8 @@ Only these GPUI source/manifests are changed:
 - `crates/gpui/src/text_system.rs`
 - `crates/gpui_platform/Cargo.toml`
 - `crates/gpui_windows/src/direct_write.rs`
+- `crates/gpui_windows/src/events.rs`
+- `crates/gpui_windows/src/platform.rs`
 
 `extended-image-formats` controls the additional image codecs and image/rayon.
 `svg-text` controls SVG text, font loading and shaping, and emoji fallback.
@@ -138,9 +140,8 @@ Validation on x86_64 Windows MSVC with Rust 1.98.1:
   strings and pass the native OS to `unparse`; remove explicit `IntoElement`
   implementations covered by the new blanket implementation; reference the
   already-resolved `anyhow` crate directly for HTTP errors.
-- For the unpublished local integration, run Edot's source/feature check with
-  `python tools/check_gpui_features.py --local-fork`. Without that flag the
-  checker continues requiring published, matching Git revision pins.
+- Use temporary local paths to validate unpublished integrations. Restore
+  published, matching Git pins before running Edot's source/feature checker.
 
 Validation on Windows x86_64 MSVC:
 
@@ -162,3 +163,24 @@ Validation on Windows x86_64 MSVC:
   frame. No leaked horizontal line appeared in the 26 captured frames.
 - The Edot executable is 11,860,480 bytes, compared with 11,676,160 bytes before
   this integration. These validation runs preceded publishing the merge.
+
+## Windows IME cursor recovery (2026-11-19)
+
+- Forward composition end to the text input handler, and release any abandoned
+  preedit when a new native composition begins.
+- Before mouse-down reaches a view, complete the focused window's live IMM
+  composition and clear leftover marked text. Completion may synchronously
+  invoke the input handler, so it runs before taking the mouse input callback.
+- Before dispatching navigation keys, clear abandoned marked text only when
+  IMM has no live composition. Preserve live IME navigation and avoid completing
+  a different window's shared input context.
+- If native completion fails, consume the mouse-down rather than move the
+  selection while the old composition still owns subsequent text.
+- The Edot ignored native probe and `tools/test_ime_cursor.py` exercise actual
+  Win32 start/end, mouse and navigation dispatch with a deliberately abandoned
+  preedit. The published parent fails those recovery cases. The fixed backend
+  also preserves undo and normal Microsoft Korean IME composition without
+  duplicated or lost characters. The original intermittent trigger remains
+  distinct from this controlled reproduction of its broken state.
+- Correct the deferred-font test's stale `new(None)` call to the current `new()`
+  signature so all-targets Windows Clippy can check that test as well.

@@ -2063,7 +2063,7 @@ mod tests {
     #[test]
     #[cfg(feature = "deferred-fonts")]
     fn test_deferred_system_fonts_refresh_once_preserves_resolved_fonts() -> Result<()> {
-        let system = std::sync::Arc::new(DirectWriteTextSystem::new(None)?);
+        let system = std::sync::Arc::new(DirectWriteTextSystem::new()?);
         let font = gpui::font("Segoe UI");
         let original_id = system.font_id(&font)?;
         let original_font_count = system.state.read().fonts.len();

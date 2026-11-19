@@ -149,8 +149,15 @@ impl WindowsWindowInner {
             WM_SYSKEYUP => self.handle_syskeyup_msg(wparam, lparam),
             WM_KEYUP => self.handle_keyup_msg(wparam, lparam),
             WM_CHAR => self.handle_char_msg(wparam),
-            WM_IME_STARTCOMPOSITION => self.handle_ime_position(handle),
+            WM_IME_STARTCOMPOSITION => {
+                self.unmark_ime_text();
+                self.handle_ime_position(handle)
+            }
             WM_IME_COMPOSITION => self.handle_ime_composition(handle, lparam),
+            WM_IME_ENDCOMPOSITION => {
+                self.unmark_ime_text();
+                None
+            }
             WM_SETCURSOR => self.handle_set_cursor(handle, lparam),
             WM_SETTINGCHANGE => self.handle_system_settings_changed(handle, wparam, lparam),
             WM_INPUTLANGCHANGE => self.handle_input_language_changed(),
@@ -423,7 +430,17 @@ impl WindowsWindowInner {
 
     // It's a known bug that you can't trigger `ctrl-shift-0`. See:
     // https://superuser.com/questions/1455762/ctrl-shift-number-key-combination-has-stopped-working-for-a-few-numbers
-    pub(crate) fn handle_keydown_msg(&self, wparam: WPARAM, lparam: LPARAM) -> Option<isize> {
+    pub(crate) fn handle_keydown_msg(
+        &self,
+        handle: HWND,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> Option<isize> {
+        if (VK_PRIOR.0..=VK_DOWN.0).contains(&(wparam.0 as u16)) {
+            // Leave a live IME's navigation alone, but release an abandoned
+            // preedit before the editor can consume every navigation key.
+            self.finish_ime_composition(handle, false);
+        }
         let Some(input) = handle_key_event(
             wparam,
             lparam,
@@ -482,6 +499,11 @@ impl WindowsWindowInner {
         button: MouseButton,
         lparam: LPARAM,
     ) -> Option<isize> {
+        // Completion can synchronously deliver IME callbacks. Do it before
+        // taking the input callback or letting a view move its selection.
+        if !self.finish_ime_composition(handle, true) {
+            return Some(0);
+        }
         unsafe { SetCapture(handle) };
 
         let Some(mut func) = self.state.callbacks.input.take() else {
@@ -653,6 +675,42 @@ impl WindowsWindowInner {
                     + ((caret_position.size.height.as_f32() * scale_factor) as i32 / 2),
             })
         })
+    }
+
+    fn unmark_ime_text(&self) {
+        self.with_input_handler(|handler| {
+            if handler.marked_text_range().is_some() {
+                handler.unmark_text();
+            }
+        });
+    }
+
+    fn finish_ime_composition(&self, handle: HWND, complete: bool) -> bool {
+        if !self
+            .with_input_handler(|handler| handler.marked_text_range().is_some())
+            .unwrap_or(false)
+        {
+            return true;
+        }
+        // IMM contexts are shared by windows on a thread. Never complete a
+        // composition owned by a different window after focus has moved.
+        if unsafe { GetFocus() } == handle
+            && let Some(context) = ImeContext::get(handle)
+            && unsafe { ImmGetCompositionStringW(*context, GCS_COMPSTR, None, 0) } != 0
+        {
+            if !complete {
+                return true;
+            }
+            if unsafe { ImmNotifyIME(*context, NI_COMPOSITIONSTR, CPS_COMPLETE, 0) }
+                .ok()
+                .log_err()
+                .is_none()
+            {
+                return false;
+            }
+        }
+        self.unmark_ime_text();
+        true
     }
 
     fn handle_ime_position(&self, handle: HWND) -> Option<isize> {

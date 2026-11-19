@@ -1186,8 +1186,9 @@ impl WindowsPlatformInner {
             return false;
         }
 
-        self.window_from_hwnd(msg.hwnd)
-            .is_some_and(|window| window.handle_keydown_msg(msg.wParam, msg.lParam) == Some(0))
+        self.window_from_hwnd(msg.hwnd).is_some_and(|window| {
+            window.handle_keydown_msg(msg.hwnd, msg.wParam, msg.lParam) == Some(0)
+        })
     }
 
     /// Calls `project` to project to the corresponding callback field, removes it from callbacks, calls `f` with the callback and then puts the callback back.
