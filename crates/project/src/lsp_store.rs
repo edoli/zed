@@ -70,8 +70,8 @@ use futures::{
 };
 use globset::{Glob, GlobBuilder, GlobMatcher, GlobSet, GlobSetBuilder};
 use gpui::{
-    App, AppContext, AsyncApp, Context, Entity, EventEmitter, PromptLevel, SharedString,
-    Subscription, Task, TaskExt, WeakEntity,
+    App, AppContext, AsyncApp, BackgroundExecutor, Context, Entity, EventEmitter, PromptLevel,
+    SharedString, Subscription, Task, TaskExt, WeakEntity,
 };
 use http_client::HttpClient;
 use itertools::Itertools as _;
@@ -96,8 +96,8 @@ use language::{
     row_chunk::RowChunk,
 };
 use lsp::{
-    AdapterServerCapabilities, CodeActionKind, CompletionContext, DEFAULT_LSP_REQUEST_TIMEOUT,
-    DiagnosticServerCapabilities, DiagnosticSeverity, DiagnosticTag,
+    AdapterServerCapabilities, CodeActionKind, CompletionContext, CompletionTriggerKind,
+    DEFAULT_LSP_REQUEST_TIMEOUT, DiagnosticServerCapabilities, DiagnosticSeverity, DiagnosticTag,
     DidChangeWatchedFilesRegistrationOptions, Edit, FileOperationFilter, FileOperationPatternKind,
     FileOperationRegistrationOptions, FileRename, FileSystemWatcher, LanguageServer,
     LanguageServerBinary, LanguageServerBinaryOptions, LanguageServerId, LanguageServerName,
@@ -6525,7 +6525,7 @@ impl LspStore {
                             worktree_path,
                             language.name(),
                             language.manifest(),
-                            delegate.clone(),
+                            delegate,
                             cx,
                         )
                         .collect::<Vec<_>>();
@@ -8047,6 +8047,12 @@ impl LspStore {
                 this.update(cx, |lsp_store, cx| {
                     for server_id in server_ids {
                         let lsp_adapter = lsp_store.language_server_adapter_for_id(server_id);
+                        let context = lsp_store.completion_context_for_server(
+                            buffer.read(cx),
+                            server_id,
+                            context.clone(),
+                            cx,
+                        );
                         let lsp_timeout = lsp_timeout
                             .map(|lsp_timeout| cx.background_executor().timer(lsp_timeout));
                         let mut timeout = cx.background_spawn(async move {
@@ -8063,7 +8069,7 @@ impl LspStore {
                             LanguageServerToQuery::Other(server_id),
                             GetCompletions {
                                 position,
-                                context: context.clone(),
+                                context,
                                 server_id: Some(server_id),
                             },
                             cx,
@@ -8108,6 +8114,36 @@ impl LspStore {
         } else {
             Task::ready(Err(anyhow!("No upstream client or local language server")))
         }
+    }
+
+    fn completion_context_for_server(
+        &self,
+        buffer: &Buffer,
+        server_id: LanguageServerId,
+        mut context: CompletionContext,
+        cx: &App,
+    ) -> CompletionContext {
+        if context.trigger_kind != CompletionTriggerKind::TRIGGER_CHARACTER {
+            return context;
+        }
+        let Some(local) = self.as_local() else {
+            return context;
+        };
+        let Some(adapter) = self.language_server_adapter_for_id(server_id) else {
+            return context;
+        };
+
+        let triggers =
+            completion_trigger_characters_for_buffer(local, server_id, &adapter, buffer, cx);
+        if !context
+            .trigger_character
+            .as_ref()
+            .is_some_and(|trigger| triggers.contains(trigger))
+        {
+            context.trigger_kind = CompletionTriggerKind::INVOKED;
+            context.trigger_character = None;
+        }
+        context
     }
 
     pub fn resolve_completions(
@@ -17004,6 +17040,7 @@ pub struct LocalLspAdapterDelegate {
     worktree: worktree::Snapshot,
     fs: Arc<dyn Fs>,
     http_client: Arc<dyn HttpClient>,
+    background_executor: BackgroundExecutor,
     language_registry: Arc<LanguageRegistry>,
     load_shell_env_task: Shared<Task<Option<HashMap<String, String>>>>,
 }
@@ -17026,6 +17063,7 @@ impl LocalLspAdapterDelegate {
             worktree: worktree.read(cx).snapshot(),
             fs,
             http_client,
+            background_executor: cx.background_executor().clone(),
             language_registry,
             load_shell_env_task,
         })
@@ -17060,6 +17098,10 @@ impl LspAdapterDelegate for LocalLspAdapterDelegate {
 
     fn http_client(&self) -> Arc<dyn HttpClient> {
         self.http_client.clone()
+    }
+
+    fn background_executor(&self) -> &BackgroundExecutor {
+        &self.background_executor
     }
 
     fn worktree_id(&self) -> WorktreeId {

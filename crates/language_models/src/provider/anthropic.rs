@@ -350,6 +350,14 @@ impl LanguageModelProvider for AnthropicLanguageModelProvider {
         self.state.update(cx, |state, cx| state.authenticate(cx))
     }
 
+    fn refresh_models(&self, cx: &mut App) {
+        self.state.update(cx, |state, cx| {
+            if state.is_authenticated() {
+                state.restart_fetch_models_task(cx);
+            }
+        });
+    }
+
     fn settings_view(&self, cx: &mut App) -> Option<ProviderSettingsView> {
         let state = self.state.read(cx);
         Some(ProviderSettingsView::ApiKey(ApiKeyConfiguration::new(
@@ -1011,6 +1019,7 @@ fn language_model(model: &anthropic::Model) -> LanguageModel {
         },
         supports_thinking: model.supports_thinking,
         supports_fast_mode: model.supports_speed,
+        supports_ultrafast_mode: false,
         refusal_fallback_model_id: model
             .id
             .starts_with(anthropic::FABLE_MODEL_ID_PREFIX)

@@ -6,8 +6,11 @@ The `edot-gpui` branch starts at upstream commit
 published as `gpui-pre 0.3.8`. Edot consumes `gpui` and `gpui_platform` directly
 from one pinned commit; their workspace dependencies come from this same tree.
 
-Latest merged upstream main: `03efd49220ba06703d04f9c4732fdf814f9c523c`
-(2026-10-22). Updating this checkout does not change Edot's pinned dependency.
+Latest integrated upstream main: `3c2118dd69c02bab648e1d5f9f51800b46af7771`
+(2026-11-19 integration; upstream commit dated 2026-11-18).
+The `gpui-edol` branch merges this revision while retaining the maintained
+changes below. Edot pins both GPUI dependencies to the same published fork
+commit. Local paths are used only while validating unpublished integrations.
 
 ## Maintained changes
 
@@ -49,7 +52,7 @@ It shares upstream's `CachedFont` cache: direct matches succeed, while missing
 fonts and entries already resolved through a fallback return an error. A lookup
 must not replace a cached fallback or report that fallback as a direct match.
 
-The root README review notice is required by upstream `.rules`. This branch
+The root README review notice is required by upstream `AGENTS.md`. This branch
 also contains this maintenance document. No crates.io snapshot importer or
 separate patch file is used.
 
@@ -118,3 +121,44 @@ Validation on x86_64 Windows MSVC with Rust 1.98.1:
 - `cargo build --release --target-dir target -p gpui -p gpui_platform
   --no-default-features --features gpui/windows-manifest,gpui_platform/deferred-fonts
   --locked` passed. This builds the fork libraries, not the pinned Edot app.
+
+## 2026-11-19 integration
+
+- Merged upstream main into `gpui-edol`. The seven maintained
+  GPUI files remain the only source/manifests that differ from upstream.
+- `crates/gpui/Cargo.toml`: retain upstream's `icu_segmenter` dependency together
+  with the fork's optional image, SVG text, and raster feature controls.
+- `crates/gpui/src/svg_renderer.rs`: keep upstream's parsed SVG cache and font
+  options, and gate font initialization, font helpers, and text tests behind
+  `svg-text`. The vector-only configuration still uses default SVG options.
+- Upstream `Window::cover_bounds` now returns zero size for empty bounds before
+  outward rounding. No fork-specific clipping fix is needed. Edot removes its
+  `paint_if_visible` workaround and retains the scrolling regression test.
+- Consumer compatibility changes: use `Keystroke::parse_with_os` for dynamic
+  strings and pass the native OS to `unparse`; remove explicit `IntoElement`
+  implementations covered by the new blanket implementation; reference the
+  already-resolved `anyhow` crate directly for HTTP errors.
+- For the unpublished local integration, run Edot's source/feature check with
+  `python tools/check_gpui_features.py --local-fork`. Without that flag the
+  checker continues requiring published, matching Git revision pins.
+
+Validation on Windows x86_64 MSVC:
+
+- Workspace formatting and the fork diff against upstream passed.
+- `./script/clippy -p gpui -p gpui_platform --locked --target-dir target`
+  passed with all features and targets enabled.
+- Both fallible font lookup tests, four empty/fractional clip and shadow tests,
+  and all ten SVG renderer tests passed. Test execution used
+  `cargo test --release -p gpui --lib --all-features --locked --target-dir target`
+  with command-line overrides `--config profile.release.package.gpui.opt-level=0`
+  and `--config profile.release.package.gpui.codegen-units=256`. The initial
+  fully optimized test build was stopped during lengthy optimization; these
+  overrides affect only the test command and are not saved in the manifests.
+- Edot passed 145 tests, all-targets Clippy with warnings denied, formatting,
+  the local fork source/feature guard, the release build, and the binary path
+  audit. Its normal release optimization settings were retained.
+- The actual `target/release/edot.exe` passed a native Windows check with
+  separate temporary data: initial frame, 24 scroll samples, and a resized
+  frame. No leaked horizontal line appeared in the 26 captured frames.
+- The Edot executable is 11,860,480 bytes, compared with 11,676,160 bytes before
+  this integration. These validation runs preceded publishing the merge.

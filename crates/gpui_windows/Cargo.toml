@@ -22,8 +22,6 @@ default = ["gpui/default", "extended-image-formats"]
 test-support = ["gpui/test-support"]
 screen-capture = ["gpui/screen-capture", "scap"]
 
-[dependencies]
-gpui.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 accesskit.workspace = true
@@ -33,6 +31,7 @@ collections.workspace = true
 dunce.workspace = true
 etagere.workspace = true
 futures.workspace = true
+gpui.workspace = true
 gpui_util.workspace = true
 # Workspace image features would unconditionally enable the extended codecs.
 image = { version = "0.25.1", default-features = false, features = ["bmp", "gif", "jpeg", "png", "webp"] }
